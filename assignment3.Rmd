@@ -1,7 +1,7 @@
 ---
 title: "Statistical assignment 3"
-author: "[add your name here] [add your candidate number here - mandatory]"
-date: "[add date here]"
+author: "Thea Smith 670011286"
+date: "12/02/20"
 output: github_document
 ---
 
@@ -30,10 +30,10 @@ library(data.table)
 # data.table is faster compared to readr so we'll use it in this case (the function fread()). You need to install this package first to be able to run this code.
 
 # create a vector with the file names and paths
-
+getwd()
 files <- dir(
              # Select the folder where the files are stored.
-             "[add your path here]",
+             "/Users/TheaSmith/Desktop/Data Analysis III/assignment-3-tkcs201",
              # Tell R which pattern you want present in the files it will display.
              pattern = "indresp",
              # We want this process to repeat through the entire folder.
@@ -74,8 +74,9 @@ Now we have got the data from all 7 waves in the same data frame **all7** in the
 
 ```{r}
 Long <- all7 %>%
-  ...
-Long
+  pivot_longer(a_memorig:g_vote6, names_to = "variable", values_to = "value") %>%
+  separate(variable, into = c("wave", "variable"), sep = "_", extra = "merge") %>%
+  pivot_wider(names_from = variable, values_from = value)
 ```
 
 ## Filter and recode (20 points)
@@ -84,15 +85,24 @@ Now we want to filter the data keeping only respondents from the original UKHLS 
 
 ```{r}
 Long <- Long %>%
-        filter(...) %>%
-        mutate(sex_dv = ...) %>%
-        mutate(vote6 = ...)
+        filter(memorig == 1) %>%
+  mutate(sex_dv = ifelse(sex_dv == 2, "female",
+                         ifelse(sex_dv == 1, "male", NA))) %>%
+        mutate(vote6 = recode(vote6, 
+                              '1'=1, 
+                              '2'=2,
+                              '3'=3, 
+                              '4'=4, 
+                              '-1'= NA_real_, 
+                              '-2'= NA_real_, 
+                              '-7'= NA_real_, 
+                              '-9'= NA_real_,
+                              '-10'= NA_real_
+        ))
 
-Long %>%
-        ...
-Long %>%
-        ...
+table(Long$sex_dv)
 
+table(Long$vote6)
 ```
 
 ## Calculate mean political interest by sex and wave (10 points)
@@ -101,7 +111,8 @@ Political interest is an ordinal variable, but we will treat it as interval and 
 
 ```{r}
 meanVote6 <- Long %>%
-        ...
+        group_by(wave, sex_dv)%>%
+  summarise(meanVote6 = mean(vote6, na.rm = TRUE))
         
 meanVote6
 ```
@@ -121,8 +132,10 @@ Write a short interpretation of your findings.
 
 ```{r}
 meanVote6 %>%
-        ...
+pivot_wider(names_from = wave, values_from = meanVote6)
 ```
+
+From these results we can see that both men and women become more interested in politics overall over time, from wave a to wave g. Both men and women on average become more interested in politics from wave a to b then increase interest between b and d, then finally increase interest to wave g. Men on average are more interested in politics than women. In all waves both men and women on average fall between "fairly interested" and "not interested at all". 
 
 ## Estimate stability of political interest (30 points)
 
@@ -141,12 +154,52 @@ Large Delta indicates unstable political interest. Delta = 0 indicates a constan
 Write the R code that does the following.
 
 1. To simplify interpretation, keep only the respondents with non-missing values for political interest in all seven waves.
-2. Calculate Delta for each person in the data set.
-3. Calculate mean Delta for men and women.
-4. Calculate mean Delta by age (at wave 1) and plot the local polynomial curve showing the association between age at wave 1 and mean Delta. You can use either **ggplot2** or the *scatter.smooth()* function from base R.
-5. Write a short interpretation of your findings.
 
 ```{r}
-...
-
+DeltaNoNA <- all7 %>%
+  filter(complete.cases(a_vote6,b_vote6,c_vote6,d_vote6,e_vote6,f_vote6,g_vote6))    
 ```
+
+2. Calculate Delta for each person in the data set.
+
+```{r}
+DeltaNoNA <- DeltaNoNA %>%
+  mutate(Delta = abs(b_vote6 - a_vote6) + 
+           abs(c_vote6 - b_vote6) +
+           abs(d_vote6 - c_vote6) + 
+           abs(e_vote6 - d_vote6) + 
+           abs(f_vote6 - e_vote6) + 
+           abs(g_vote6 - f_vote6))
+```
+
+3. Calculate mean Delta for men and women.
+
+```{r}
+MeanDeltaSex <- DeltaNoNA %>%
+  group_by(a_sex_dv) %>%
+  summarise(MeanDelta = mean(Delta, na.rm = TRUE))
+
+MeanDeltaSex
+```
+
+
+4. Calculate mean Delta by age (at wave 1) and plot the local polynomial curve showing the association between age at wave 1 and mean Delta. You can use either **ggplot2** or the *scatter.smooth()* function from base R.
+
+```{r}
+MeanDeltaAge <- DeltaNoNA %>%
+  group_by(a_age_dv) %>%
+  summarise(MeanDelta = mean(Delta, na.rm = TRUE))
+
+MeanDeltaAge
+
+MeanDeltaAge %>%
+  group_by(a_age_dv) %>%
+  summarise(Delta = mean(MeanDelta, na.rm = TRUE)) %>%
+  ggplot(aes(x = a_age_dv, y = Delta, group = 1)) +
+  geom_point(col = "purple") +
+  stat_smooth(method = 'loess', formula = y~x)
+```
+
+5. Write a short interpretation of your findings.
+
+From this graph we can see that age influences the consistency of political interest. We can see that up to about the age of 25, on average people become more consistent from having Deltas of 9.73 at age 18 down to a Delta of 3.81 at 25. Between the ages of 26 and about 80 the Deltas decrease and after that the Deltas fluctuate. There are also 2 anomalies at age 15 with a Delta of 19.43 and at age 23 with a Delta of 23. 
